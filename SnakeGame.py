@@ -29,11 +29,14 @@ def main():
     # Initialize the game window, environment and q_learning algorithm
     # Your code here.
     # You must define the number of possible states.
-    # number_states = whatever
+
+    number_states = 4
+
     pygame.init()
     env = SnakeGameEnv(FRAME_SIZE_X, FRAME_SIZE_Y, growing_body)
     ql = QLearning(n_states=number_states, n_actions=4)  
-    # num_episodes = the number of episodes you want for training.
+
+    num_episodes = 4 # the number of episodes you want for training.
 
 
     if render_game:
@@ -48,12 +51,27 @@ def main():
         while not game_over:
             # Your code here.
             # Choose the best action for the state and possible actions from the q_learning algorithm
+            possible_actions = [] # add possible actions based on boundaries
+            if state[0] != FRAME_SIZE_X:
+                possible_actions.append(3)  # RIGHT (3)
+            if state[0] != 0:
+                possible_actions.append(2)  # LEFT (2)
+            if state[1] != FRAME_SIZE_Y:
+                possible_actions.append(1)  # DOWN (1)
+            if state[1] != 0:
+                possible_actions.append(0)  # UP (0)
+            best_action = ql.choose_action(state, possible_actions)  # Note: use instance method
+            
             # Call the environment step with that action and get next_state, reward and game_over variables
             if training:
+
+                pass
                 #update the q table using those variables.
                 
             # Update the state and the total_reward.
-            
+            state = env.get_state()
+            total_reward += env.calculate_reward()
+
             # Render
             if render_game:
                 game_window.fill(BLACK)
@@ -79,5 +97,8 @@ def main():
         ql.save_q_table()
         print(f"Episode {episode+1}, Total reward: {total_reward}")
 
+    
 if __name__ == "__main__":
     main()
+
+

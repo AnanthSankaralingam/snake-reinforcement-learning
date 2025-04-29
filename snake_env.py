@@ -41,10 +41,14 @@ class SnakeGameEnv:
 
     def get_state(self):
         # Your code here
-        # Here, you will calculate the state based on your actual state calculation logic
-
-        # state = whatever
-        # return state
+        # 4 main attributes: head, tail, distance to food. generic but meaningful to reward and bellman
+        state = np.zeros(4)
+        state[0] = self.snake_pos[0]
+        state[1] = self.snake_pos[1]
+        state[2] = self.snake_pos[0] - self.food_pos[0]
+        state[3] = self.snake_pos[1] - self.food_pos[1]
+        
+        return state
         
     def get_body(self):
     	return self.snake_body
@@ -55,8 +59,9 @@ class SnakeGameEnv:
     def calculate_reward(self):
         # Your code here
         # Calculate and return the reward. Remember that you can provide possitive or negative reward.
-        # reward = whatever
-        # return reward
+        head, tail, head_to_food, tail_to_food = self.get_state() 
+        reward = 1 + (-.25 * head_to_food) + (-.25 * tail_to_food)
+        return reward
         
     def check_game_over(self):
         # Return True if the game is over, else False
@@ -123,4 +128,5 @@ class SnakeGameEnv:
         self.food_spawn = True
         
         
+
 

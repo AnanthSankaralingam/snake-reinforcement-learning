@@ -1,7 +1,6 @@
 """
 Snake Eater Q learning basic algorithm
 Made with PyGame
-Last modification in April 2024 by José Luis Perán
 Machine Learning Classes - University Carlos III of Madrid
 """
 import numpy as np
@@ -36,7 +35,15 @@ class QLearning:
         # Q(state,action) <- (1-self.alpha) Q(state,action) + self.alpha * (r + 0)
         # else:
         # Q(state,action) <- (1-self.alpha) Q(state,action) + self.alpha * (r + self.discount * max a' Q(nextState, a'))
-
+        
+        if next_state is None:
+            # Terminal state: Q(state,action) <- (1-self.alpha) Q(state,action) + self.alpha * (r + 0)
+            self.q_table[state][action] = (1 - self.alpha) * self.q_table[state][action] + self.alpha * reward
+        else:
+            # Non-terminal: Include discounted max Q(nextState)
+            max_next_q = max(self.q_table[next_state][action]) #FIXME action
+            self.q_table[state][action] = (1 - self.alpha) * self.q_table[state][action] + self.alpha * (reward + self.discount * max_next_q)
+        
     def save_q_table(self, filename="q_table.txt"):
         np.savetxt(filename, self.q_table)
 
