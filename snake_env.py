@@ -4,6 +4,7 @@ Made with PyGame
 Last modification in April 2024 by José Luis Perán
 Machine Learning Classes - University Carlos III of Madrid
 """
+
 import numpy as np
 import random
 
@@ -40,6 +41,7 @@ class SnakeGameEnv:
         return state, reward, self.game_over
 
     def get_state(self):
+        
         # Your code here
         # 4 main attributes: head, tail, distance to food. generic but meaningful to reward and bellman
         state = np.zeros(4)
@@ -50,18 +52,38 @@ class SnakeGameEnv:
         
         return state
         
+        #return self.snake_pos, self.snake_body, self.food_pos, self.direction
+    
     def get_body(self):
-    	return self.snake_body
+        return self.snake_body
 
     def get_food(self):
-    	return self.food_pos
+        return self.food_pos
 
     def calculate_reward(self):
+        """
         # Your code here
         # Calculate and return the reward. Remember that you can provide possitive or negative reward.
         head, tail, head_to_food, tail_to_food = self.get_state() 
         reward = 1 + (-.25 * head_to_food) + (-.25 * tail_to_food)
         return reward
+        """
+
+        head_x, head_y = self.snake_pos
+        food_x, food_y = self.food_pos
+        
+        # Distance to food
+        dist = abs(head_x - food_x) + abs(head_y - food_y)
+        
+        # Check if food eaten
+        if head_x == food_x and head_y == food_y:
+            return 10
+        # Check if game over
+        elif self.check_game_over():
+            return -10
+        # Encourage moving towards food
+        else:
+            return 1 / (dist + 1)  # Smaller distance = higher reward
         
     def check_game_over(self):
         # Return True if the game is over, else False
@@ -126,7 +148,3 @@ class SnakeGameEnv:
         if not self.food_spawn:
             self.food_pos = [random.randrange(1, (self.frame_size_x//10)) * 10, random.randrange(1, (self.frame_size_x//10)) * 10]
         self.food_spawn = True
-        
-        
-
-
