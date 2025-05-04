@@ -5,6 +5,7 @@ Last modification in April 2024 by José Luis Perán
 Machine Learning Classes - University Carlos III of Madrid
 """
 
+import numpy as np
 from snake_env import SnakeGameEnv
 from q_learning import QLearning
 import pygame
@@ -12,25 +13,30 @@ import sys
 import math
 
 def get_state_index(state):
+    # Your code here
     """
-    Convert continuous state to discrete index for Q-table of size 80.
-    Simplified to fit within original state space.
+    Convert continuous state to discrete index for Q-table.
+    Total states: 4 × 5 × 2 = 40 states
     """
-    _, _, dx, dy, danger_straight, danger_right, danger_left, danger_behind = state
+    _, _, dx, dy, danger_straight, danger_right, danger_left, _ = state
     
-    dx, dy = state[2], state[3]
-    direction = 0 if abs(dx) > abs(dy) else 2
-    direction += 1 if (dx if direction==0 else dy) > 0 else 0
+    # Food direction relative to snake (4 possibilities)
+    if abs(dx) > abs(dy):  # Horizontal alignment is stronger
+        direction = 0 if dx > 0 else 1  # 0: food is right, 1: food is left
+    else:  # Vertical alignment is stronger
+        direction = 2 if dy > 0 else 3  # 2: food is down, 3: food is up
     
-    # Coarser distance bins
+    # Simplified distance (5 bins)
     distance = abs(dx) + abs(dy)
-    distance_bin = min(4, distance // 25)  # 5 bins instead of 10
+    distance_bin = min(4, distance // 30)  # 5 distance bins (0-4)
     
-    # Danger encoding
-    danger = int(danger_straight or danger_right or danger_left or danger_behind)
+    # Simplified danger (2 states)
+    # Just check if any immediate danger exists
+    danger = 1 if (danger_straight or danger_right or danger_left) else 0
     
-    return int(direction * 5 * 2 + distance_bin * 2 + danger)
-
+    # Calculate state index: direction × 5 × 2 + distance_bin × 2 + danger
+    # This gives 40 unique states (4 directions × 5 distances × 2 danger states)
+    return int(direction * 10 + distance_bin * 2 + danger)
 
 def main():
     # Window size
@@ -53,23 +59,24 @@ def main():
     # Your code here.
     # You must define the number of possible states.
 
-    number_states = 80
+    number_states = 40 # 80
 
     pygame.init()
     env = SnakeGameEnv(FRAME_SIZE_X, FRAME_SIZE_Y, growing_body)
     ql = QLearning(
-        n_states=number_states,  
+        n_states=number_states, 
         n_actions=4,
-        alpha=0.1,      
-        gamma=0.99,    
+        alpha=0.05,      
+        gamma=0.95,    
         epsilon=1.0,    # Start fully exploratory
-        epsilon_min=0.01,
-        epsilon_decay=0.99995  
+        epsilon_min=0.05,  
+        epsilon_decay=0.999  # Slow decay
     )
 
     num_episodes = 1000 # the number of episodes you want for training.
 
     def get_safe_actions(env, lookahead_steps=2):
+        # your code here
         """returns only actions that won't cause immediate or predictable collisions
         args:
             env: the snake game environment
@@ -162,10 +169,24 @@ def main():
             # discretize state: distance to food
             state_index = get_state_index(state)
             
-            allowed_actions = get_safe_actions(env)  # all actions initially allowed
+            if training and episode < 300:
+                # During early training, use all actions (no lookahead)
+                allowed_actions = [0, 1, 2, 3]
+                # Exclude only direct reversals
+                if env.direction == 'UP': 
+                    allowed_actions.remove(1)  # remove DOWN
+                elif env.direction == 'DOWN': 
+                    allowed_actions.remove(0)  # remove UP
+                elif env.direction == 'LEFT': 
+                    allowed_actions.remove(3)  # remove RIGHT
+                elif env.direction == 'RIGHT': 
+                    allowed_actions.remove(2)  # remove LEFT
+            else:
+                # Later in training and during evaluation, use safety lookahead
+                lookahead = 1 if episode < 500 else 2
+                allowed_actions = get_safe_actions(env, lookahead)
+            allowed_actions = get_safe_actions(env, lookahead)  # all actions initially allowed
 
-            #FIXME are we allowed to do this
-            
             # Choose action using epsilon-greedy strategy
             action = ql.choose_action(state_index, allowed_actions)
 

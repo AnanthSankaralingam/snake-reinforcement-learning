@@ -97,53 +97,53 @@ class SnakeGameEnv:
     def get_food(self):
         return self.food_pos
 
-    def calculate_reward(self):
-        """
-        # Your code here
-        # Calculate and return the reward. Remember that you can provide possitive or negative reward.
-        head, tail, head_to_food, tail_to_food = self.get_state() 
-        reward = 1 + (-.25 * head_to_food) + (-.25 * tail_to_food)
-        return reward
-        """
+    # def calculate_reward(self):
+    #     """
+    #     # Your code here
+    #     # Calculate and return the reward. Remember that you can provide possitive or negative reward.
+    #     head, tail, head_to_food, tail_to_food = self.get_state() 
+    #     reward = 1 + (-.25 * head_to_food) + (-.25 * tail_to_food)
+    #     return reward
+    #     """
 
-        head_x, head_y, x_to_food, y_to_food, _, _, _, _ = self.get_state()
-        food_x, food_y = self.food_pos
+    #     head_x, head_y, x_to_food, y_to_food, _, _, _, _ = self.get_state()
+    #     food_x, food_y = self.food_pos
         
-        # Check if food eaten
-        if head_x == food_x and head_y == food_y:
-            return 15
+    #     # Check if food eaten
+    #     if head_x == food_x and head_y == food_y:
+    #         return 15
         
-        # big penalty if die
-        if self.check_game_over():
-            return -20
+    #     # big penalty if die
+    #     if self.check_game_over():
+    #         return -20
         
-        # Small penalty for moving into dangerous positions. learn to avoid dangerous situations even before dying
-        # if danger_straight or danger_right or danger_left:
-        #     return -0.1
+    #     # Small penalty for moving into dangerous positions. learn to avoid dangerous situations even before dying
+    #     # if danger_straight or danger_right or danger_left:
+    #     #     return -0.1
         
-        # # Encourage moving towards food
-        # # prev and curr dist to food
-        # old_head_pos = self.snake_body[1]  # Tail is Previous head position!!
+    #     # # Encourage moving towards food
+    #     # # prev and curr dist to food
+    #     # old_head_pos = self.snake_body[1]  # Tail is Previous head position!!
 
-        # # manhattan dist
-        # old_distance = abs(old_head_pos[0] - self.food_pos[0]) + abs(old_head_pos[1] - self.food_pos[1])
-        # new_distance = abs(self.snake_pos[0] - self.food_pos[0]) + abs(self.snake_pos[1] - self.food_pos[1])
+    #     # # manhattan dist
+    #     # old_distance = abs(old_head_pos[0] - self.food_pos[0]) + abs(old_head_pos[1] - self.food_pos[1])
+    #     # new_distance = abs(self.snake_pos[0] - self.food_pos[0]) + abs(self.snake_pos[1] - self.food_pos[1])
         
-        # # Small reward for moving toward food, small penalty for moving away
-        # if new_distance < old_distance:
-        #     return 0.1
-        # else:
-        #     return -0.05
-        new_dist = abs(self.snake_pos[0] - self.food_pos[0]) + abs(self.snake_pos[1] - self.food_pos[1])
-        old_head = self.snake_body[1] if len(self.snake_body) > 1 else self.snake_pos
-        old_dist = abs(old_head[0] - self.food_pos[0]) + abs(old_head[1] - self.food_pos[1])
+    #     # # Small reward for moving toward food, small penalty for moving away
+    #     # if new_distance < old_distance:
+    #     #     return 0.1
+    #     # else:
+    #     #     return -0.05
+    #     new_dist = abs(self.snake_pos[0] - self.food_pos[0]) + abs(self.snake_pos[1] - self.food_pos[1])
+    #     old_head = self.snake_body[1] if len(self.snake_body) > 1 else self.snake_pos
+    #     old_dist = abs(old_head[0] - self.food_pos[0]) + abs(old_head[1] - self.food_pos[1])
         
-        # Progressive rewards and penalties
-        reward = 0
-        reward += 0.5 if new_dist < old_dist else -0.3
-        reward -= 0.05  # Time penalty per step
-        reward -= 0.5 * sum(self.get_state()[4:7])  # Danger penalty
-        return reward
+    #     # Progressive rewards and penalties
+    #     reward = 0
+    #     reward += 0.5 if new_dist < old_dist else -0.3
+    #     reward -= 0.05  # Time penalty per step
+    #     reward -= 0.1 * sum(self.get_state()[4:7])  # FIXME Danger penalty
+    #     return reward
 
     def check_game_over(self):
         # Return True if the game is over, else False
@@ -159,6 +159,37 @@ class SnakeGameEnv:
                 return True
                 
         return False
+
+    def calculate_reward(self):
+        # Your code here
+        """
+        Calculate reward based on game events and movement efficiency.
+        """
+        # Food-related rewards
+        if self.snake_pos[0] == self.food_pos[0] and self.snake_pos[1] == self.food_pos[1]:
+            return 10.0  # Major reward for eating food
+            
+        # Death penalty
+        if self.check_game_over():
+            return -10.0  # High penalty for dying
+        
+        # Movement rewards/penalties
+        head_x, head_y = self.snake_pos
+        food_x, food_y = self.food_pos
+        
+        # Calculate distances
+        new_dist = abs(head_x - food_x) + abs(head_y - food_y)
+        old_head = self.snake_body[1] if len(self.snake_body) > 1 else self.snake_pos
+        old_dist = abs(old_head[0] - food_x) + abs(old_head[1] - food_y)
+        
+        # Reward moving toward food, penalize moving away
+        if new_dist < old_dist:
+            return 0.1  # Small reward for getting closer to food
+        elif new_dist > old_dist:
+            return -0.1  # Small penalty for moving away from food
+        
+        # Small penalty for each step to discourage loops/waiting
+        return -0.01
 
     def update_snake_position(self, action):
         # Updates the snake's position based on the action

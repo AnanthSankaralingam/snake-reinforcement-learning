@@ -18,6 +18,10 @@ class QLearning:
         self.epsilon_decay = epsilon_decay
         self.load_q_table()
 
+        # params to decrease learning rate over time
+        self.alpha_decay = 0.9999
+        self.alpha_min = 0.01
+
     def choose_action(self, state, allowed_actions):
         if np.random.uniform(0, 1) < self.epsilon:
             action = random.choice(allowed_actions)  # Explore
@@ -54,13 +58,12 @@ class QLearning:
         else:
             # Normal Bellman equation update
             max_next_q = np.max(self.q_table[next_state])
-            new_q = current_q + self.alpha * (reward + self.gamma * max_next_q - current_q) #FIXME does formula have -curr
+            new_q = (1 - self.alpha) * current_q + self.alpha * (reward + self.gamma * max_next_q) #FIXME does formula have -curr
     
         self.q_table[state, action] = new_q
 
-        # Decay epsilon  
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+        # Decay alpha
+        self.alpha = max(self.alpha_min, self.alpha * self.alpha_decay)
         
     def save_q_table(self, filename="q_table.txt"):
         np.savetxt(filename, self.q_table)
@@ -70,4 +73,5 @@ class QLearning:
             self.q_table = np.loadtxt(filename)
         except IOError:
             self.q_table = np.zeros((self.n_states, self.n_actions))
+
 
