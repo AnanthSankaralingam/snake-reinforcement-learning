@@ -12,31 +12,83 @@ import pygame
 import sys
 import math
 
-def get_state_index(state):
-    # Your code here
-    """
-    Convert continuous state to discrete index for Q-table.
-    Total states: 4 × 5 × 2 = 40 states
-    """
-    _, _, dx, dy, danger_straight, danger_right, danger_left, _ = state
+def get_state_index(state, env):
+    """Convert continuous state to discrete index using new state features"""
+    # Extract normalized values from state
+    head_x_norm, head_y_norm, dx_norm, dy_norm, danger_straight, danger_right, danger_left, food_forward, food_right, body_length = state
     
-    # Food direction relative to snake (4 possibilities)
-    if abs(dx) > abs(dy):  # Horizontal alignment is stronger
-        direction = 0 if dx > 0 else 1  # 0: food is right, 1: food is left
-    else:  # Vertical alignment is stronger
-        direction = 2 if dy > 0 else 3  # 2: food is down, 3: food is up
+    # Convert normalized distances back to pixels for binning
+    dx = dx_norm * env.frame_size_x
+    dy = dy_norm * env.frame_size_y
     
-    # Simplified distance (5 bins)
-    distance = abs(dx) + abs(dy)
-    distance_bin = min(4, distance // 30)  # 5 distance bins (0-4)
+    # Food direction (8 possibilities - combines absolute and relative)
+    if food_forward:
+        direction = 0 if food_right else 1  # 0: front-right, 1: front-left
+    else:
+        if abs(dx) > abs(dy):  # Horizontal alignment stronger
+            direction = 2 if dx > 0 else 3  # 2: right, 3: left
+        else:  # Vertical alignment stronger
+            direction = 4 if dy > 0 else 5  # 4: down, 5: up
     
-    # Simplified danger (2 states)
-    # Just check if any immediate danger exists
-    danger = 1 if (danger_straight or danger_right or danger_left) else 0
+    # Distance bins (4 possibilities)
+    distance = math.sqrt(dx**2 + dy**2)
+    distance_bin = min(3, int(distance // (env.frame_size_x/4)))  # 4 bins
     
-    # Calculate state index: direction × 5 × 2 + distance_bin × 2 + danger
-    # This gives 40 unique states (4 directions × 5 distances × 2 danger states)
-    return int(direction * 10 + distance_bin * 2 + danger)
+    # Danger level (3 possibilities: 0, 1, or 2+ dangers)
+    danger_level = min(2, danger_straight + danger_right + danger_left)
+    
+    # Body length bins (3 possibilities)
+    length_bin = min(2, int(body_length * 20 // 7))  # 3 bins
+    
+    # Combined index (6 dir × 4 dist × 3 danger × 3 length = 216 total)
+    return int((direction * 36) + (distance_bin * 9) + (danger_level * 3) + length_bin)
+
+def get_safe_actions(env, lookahead_steps=2):
+    """Updated to use normalized positions and new danger detection"""
+    safe_actions = []
+    current_head = env.snake_pos.copy()
+    current_body = env.snake_body.copy()
+    state = env.get_state()  # Use new state representation
+    
+    for action in [0, 1, 2, 3]:
+        # Skip 180-degree reversals
+        if (env.direction == 'UP' and action == 1) or \
+           (env.direction == 'DOWN' and action == 0) or \
+           (env.direction == 'LEFT' and action == 3) or \
+           (env.direction == 'RIGHT' and action == 2):
+            continue
+            
+        # Check immediate danger using state flags
+        if action == 0:  # UP
+            if state[4]: continue  # danger_straight when facing up
+        elif action == 1:  # DOWN
+            if state[4] and env.direction == 'DOWN': continue
+        elif action == 2:  # LEFT
+            if state[6]: continue  # danger_left
+        elif action == 3:  # RIGHT
+            if state[5]: continue  # danger_right
+            
+        # Advanced collision prediction
+        virtual_head = current_head.copy()
+        if action == 0: virtual_head[1] -= 10
+        elif action == 1: virtual_head[1] += 10
+        elif action == 2: virtual_head[0] -= 10
+        elif action == 3: virtual_head[0] += 10
+        
+        # Normalized position check
+        if (virtual_head[0] < 0 or virtual_head[0] >= env.frame_size_x or 
+            virtual_head[1] < 0 or virtual_head[1] >= env.frame_size_y):
+            continue
+            
+        # Body collision check using new state info
+        if state[9] > 0.15:  # Only check if snake has some length
+            future_body = [virtual_head] + current_body[:-1]
+            if any(pos == virtual_head for pos in future_body[:int(state[9]*20)]):
+                continue
+                
+        safe_actions.append(action)
+    
+    return safe_actions if safe_actions else [0, 1, 2, 3]
 
 def main():
     # Window size
@@ -53,97 +105,27 @@ def main():
     difficulty = 20  # Adjust as needed
     render_game = True # Show the game or not
     growing_body = True # Makes the body of the snake grow
-    training = False # Defines if it should train or not
+    training = True # Defines if it should train or not
 
     # Initialize the game window, environment and q_learning algorithm
     # Your code here.
     # You must define the number of possible states.
 
-    number_states = 40 # 80
+    number_states = 288 # 80
 
     pygame.init()
     env = SnakeGameEnv(FRAME_SIZE_X, FRAME_SIZE_Y, growing_body)
     ql = QLearning(
         n_states=number_states, 
         n_actions=4,
-        alpha=0.05,      
-        gamma=0.95,    
-        epsilon=1.0,    # Start fully exploratory
-        epsilon_min=0.05,  
-        epsilon_decay=0.999  # Slow decay
+        alpha=0.1,       # Higher learning rate
+        gamma=0.98,      # Slightly more future-focused
+        epsilon=1.0,
+        epsilon_min=0.1,  # Maintain some exploration
+        epsilon_decay=0.995  # Slower decay
     )
 
     num_episodes = 1000 # the number of episodes you want for training.
-
-    def get_safe_actions(env, lookahead_steps=2):
-        # your code here
-        """returns only actions that won't cause immediate or predictable collisions
-        args:
-            env: the snake game environment
-            lookahead_steps: how many future moves to simulate 
-        returns:
-            list of safe action indices (0=up, 1=down, 2=left, 3=right)
-        """
-        safe_actions = []
-        current_head = env.snake_pos.copy()
-        current_body = env.snake_body.copy()
-        
-        for action in [0, 1, 2, 3]:
-            # skip if this is a direct 180-degree reversal
-            if (env.direction == 'UP' and action == 1) or \
-            (env.direction == 'DOWN' and action == 0) or \
-            (env.direction == 'LEFT' and action == 3) or \
-            (env.direction == 'RIGHT' and action == 2):
-                continue
-                
-            # simulate movement for this action
-            virtual_head = current_head.copy()
-            if action == 0: virtual_head[1] -= 10  # up
-            elif action == 1: virtual_head[1] += 10  # down
-            elif action == 2: virtual_head[0] -= 10  # left
-            elif action == 3: virtual_head[0] += 10  # right
-            
-            # check immediate wall collision
-            if (virtual_head[0] < 0 or virtual_head[0] >= env.frame_size_x or 
-                virtual_head[1] < 0 or virtual_head[1] >= env.frame_size_y):
-                continue
-                
-            # check immediate body collision (excluding tail which will move)
-            if virtual_head in current_body[:-1]:
-                continue
-                
-            # if growing, check future body positions
-            if env.growing_body and lookahead_steps > 0:
-                collision_found = False
-                future_body = [virtual_head] + current_body[:-1]
-                
-                # simulate next moves assuming same direction (conservative estimate)
-                for _ in range(lookahead_steps):
-                    next_head = future_body[0].copy()
-                    if action == 0: next_head[1] -= 10
-                    elif action == 1: next_head[1] += 10
-                    elif action == 2: next_head[0] -= 10
-                    elif action == 3: next_head[0] += 10
-                    
-                    # check future collisions
-                    if (next_head in future_body or 
-                        next_head[0] < 0 or next_head[0] >= env.frame_size_x or
-                        next_head[1] < 0 or next_head[1] >= env.frame_size_y):
-                        collision_found = True
-                        break
-                        
-                    future_body.insert(0, next_head)
-                    if not env.growing_body:
-                        future_body.pop()
-                
-                if collision_found:
-                    continue
-                    
-            # if we get here, action is safe
-            safe_actions.append(action)
-        
-        # fallback if all actions are dangerous (should be rare)
-        return safe_actions if safe_actions else [0, 1, 2, 3]
         
     
     if render_game:
@@ -167,9 +149,9 @@ def main():
             steps += 1
 
             # discretize state: distance to food
-            state_index = get_state_index(state)
+            state_index = get_state_index(state, env)
             
-            if training and episode < 300:
+            if training and episode < 150:
                 # During early training, use all actions (no lookahead)
                 allowed_actions = [0, 1, 2, 3]
                 # Exclude only direct reversals
@@ -183,9 +165,8 @@ def main():
                     allowed_actions.remove(2)  # remove LEFT
             else:
                 # Later in training and during evaluation, use safety lookahead
-                lookahead = 1 if episode < 500 else 2
+                lookahead = 2
                 allowed_actions = get_safe_actions(env, lookahead)
-            allowed_actions = get_safe_actions(env, lookahead)  # all actions initially allowed
 
             # Choose action using epsilon-greedy strategy
             action = ql.choose_action(state_index, allowed_actions)
@@ -195,7 +176,7 @@ def main():
 
             # Get index for next state
             if not game_over:
-                next_state_index = get_state_index(next_state)
+                next_state_index = get_state_index(next_state, env)
             else:
                 next_state_index = None
 
@@ -237,6 +218,7 @@ def main():
     
 if __name__ == "__main__":
     main()
+
 
 
 

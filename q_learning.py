@@ -19,14 +19,16 @@ class QLearning:
         self.load_q_table()
 
         # params to decrease learning rate over time
-        self.alpha_decay = 0.9999
+        self.alpha_decay=0.99999
         self.alpha_min = 0.01
 
     def choose_action(self, state, allowed_actions):
         if np.random.uniform(0, 1) < self.epsilon:
             action = random.choice(allowed_actions)  # Explore
         else:
-            action = np.argmax(self.q_table[state])  # Exploit
+            q_vals = self.q_table[state, allowed_actions] # Exploit from allowed actions
+            best = np.argmax(q_vals)
+            action = allowed_actions[best]
             
         self.epsilon = max(self.epsilon_min, self.epsilon_decay * self.epsilon)
         return action
@@ -48,18 +50,20 @@ class QLearning:
             max_next_q = max(self.q_table[next_state][action]) #FIXME action
             self.q_table[state][action] = (1 - self.alpha) * self.q_table[state][action] + self.alpha * (reward + self.discount * max_next_q)
         """
+        reward = np.clip(reward, -10, 20)  # Prevent extreme rewards
         
         current_q = self.q_table[state, action]
 
         # Terminal state handling
         if next_state is None:
             # No future rewards from terminal state
-            new_q = current_q + self.alpha * (reward - current_q)
+            new_q = (1 - self.alpha) * current_q + self.alpha * (reward + 0) 
+            #current_q + self.alpha * (reward - current_q)
         else:
             # Normal Bellman equation update
             max_next_q = np.max(self.q_table[next_state])
-            new_q = (1 - self.alpha) * current_q + self.alpha * (reward + self.gamma * max_next_q) #FIXME does formula have -curr
-    
+            new_q = (1 - self.alpha) * current_q + self.alpha * (reward + self.gamma * max_next_q)
+
         self.q_table[state, action] = new_q
 
         # Decay alpha

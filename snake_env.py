@@ -42,53 +42,56 @@ class SnakeGameEnv:
         return state, reward, self.game_over
 
     def get_state(self):
-        # Your code here
-        # 7 main attributes: head, tail, distance to food, danger of walls. generic but meaningful to reward and bellman
-        state = np.zeros(8)  
+        state = np.zeros(10)  # Expanded to 10 features
         
-        head_x = self.snake_pos[0]  # head x
-        head_y = self.snake_pos[1]  # head y
-        dx = self.snake_pos[0] - self.food_pos[0]  # x distance to food
-        dy = self.snake_pos[1] - self.food_pos[1]  # y distance to food
+        head_x = self.snake_pos[0]
+        head_y = self.snake_pos[1]
+        dx = self.food_pos[0] - head_x  # Food X relative to head
+        dy = self.food_pos[1] - head_y  # Food Y relative to head
         
-        # Add danger detection in three directions (relative to current direction)
-        danger_straight, danger_right, danger_left, danger_behind = False, False, False, False
+        # Danger detection (straight, right, left)
+        danger_straight, danger_right, danger_left = False, False, False
         
-        # Check for danger based on current direction
         if self.direction == 'UP':
-            # Danger straight = wall above or body part above
             danger_straight = (head_y - 10 < 0) or ([head_x, head_y - 10] in self.snake_body[1:])
-            # Danger right = wall to the right or body part to the right
             danger_right = (head_x + 10 >= self.frame_size_x) or ([head_x + 10, head_y] in self.snake_body[1:])
-            # Danger left = wall to the left or body part to the left
             danger_left = (head_x - 10 < 0) or ([head_x - 10, head_y] in self.snake_body[1:])
-
-            danger_behind = (head_y + 10 >= self.frame_size_y) or ([head_x, head_y + 10] in self.snake_body[1:])
+            food_forward = dy < 0
+            food_right = dx > 0
+            
         elif self.direction == 'DOWN':
             danger_straight = (head_y + 10 >= self.frame_size_y) or ([head_x, head_y + 10] in self.snake_body[1:])
             danger_right = (head_x - 10 < 0) or ([head_x - 10, head_y] in self.snake_body[1:])
             danger_left = (head_x + 10 >= self.frame_size_x) or ([head_x + 10, head_y] in self.snake_body[1:])
-            danger_behind = (head_y - 10 < 0) or ([head_x, head_y - 10] in self.snake_body[1:])
+            food_forward = dy > 0
+            food_right = dx < 0
+            
         elif self.direction == 'LEFT':
             danger_straight = (head_x - 10 < 0) or ([head_x - 10, head_y] in self.snake_body[1:])
             danger_right = (head_y + 10 >= self.frame_size_y) or ([head_x, head_y + 10] in self.snake_body[1:])
             danger_left = (head_y - 10 < 0) or ([head_x, head_y - 10] in self.snake_body[1:])
-            danger_behind = (head_x + 10 >= self.frame_size_x) or ([head_x + 10, head_y] in self.snake_body[1:])
-        elif self.direction == 'RIGHT':
+            food_forward = dx < 0
+            food_right = dy < 0
+            
+        else:  # RIGHT
             danger_straight = (head_x + 10 >= self.frame_size_x) or ([head_x + 10, head_y] in self.snake_body[1:])
             danger_right = (head_y - 10 < 0) or ([head_x, head_y - 10] in self.snake_body[1:])
             danger_left = (head_y + 10 >= self.frame_size_y) or ([head_x, head_y + 10] in self.snake_body[1:])
-            danger_behind = (head_x - 10 < 0) or ([head_x - 10, head_y] in self.snake_body[1:])
+            food_forward = dx > 0
+            food_right = dy > 0
 
-        state[0] = head_x
-        state[1] = head_y
-        state[2] = dx
-        state[3] = dy
-        state[4] = int(danger_straight)  # Convert boolean to int (0 or 1)
+        # State features
+        state[0] = head_x / self.frame_size_x  # Normalized X position
+        state[1] = head_y / self.frame_size_y  # Normalized Y position
+        state[2] = dx / self.frame_size_x      # Normalized X distance to food
+        state[3] = dy / self.frame_size_y      # Normalized Y distance to food
+        state[4] = int(danger_straight)
         state[5] = int(danger_right)
         state[6] = int(danger_left)
-        state[7] = int(danger_behind)
-        
+        state[7] = int(food_forward)  # Is food in front relative to current direction
+        state[8] = int(food_right)    # Is food to the right relative to current direction
+        state[9] = len(self.snake_body) / 20  # Normalized body length (cap at 20)
+
         return state
 
     def get_body(self):
@@ -96,54 +99,6 @@ class SnakeGameEnv:
 
     def get_food(self):
         return self.food_pos
-
-    # def calculate_reward(self):
-    #     """
-    #     # Your code here
-    #     # Calculate and return the reward. Remember that you can provide possitive or negative reward.
-    #     head, tail, head_to_food, tail_to_food = self.get_state() 
-    #     reward = 1 + (-.25 * head_to_food) + (-.25 * tail_to_food)
-    #     return reward
-    #     """
-
-    #     head_x, head_y, x_to_food, y_to_food, _, _, _, _ = self.get_state()
-    #     food_x, food_y = self.food_pos
-        
-    #     # Check if food eaten
-    #     if head_x == food_x and head_y == food_y:
-    #         return 15
-        
-    #     # big penalty if die
-    #     if self.check_game_over():
-    #         return -20
-        
-    #     # Small penalty for moving into dangerous positions. learn to avoid dangerous situations even before dying
-    #     # if danger_straight or danger_right or danger_left:
-    #     #     return -0.1
-        
-    #     # # Encourage moving towards food
-    #     # # prev and curr dist to food
-    #     # old_head_pos = self.snake_body[1]  # Tail is Previous head position!!
-
-    #     # # manhattan dist
-    #     # old_distance = abs(old_head_pos[0] - self.food_pos[0]) + abs(old_head_pos[1] - self.food_pos[1])
-    #     # new_distance = abs(self.snake_pos[0] - self.food_pos[0]) + abs(self.snake_pos[1] - self.food_pos[1])
-        
-    #     # # Small reward for moving toward food, small penalty for moving away
-    #     # if new_distance < old_distance:
-    #     #     return 0.1
-    #     # else:
-    #     #     return -0.05
-    #     new_dist = abs(self.snake_pos[0] - self.food_pos[0]) + abs(self.snake_pos[1] - self.food_pos[1])
-    #     old_head = self.snake_body[1] if len(self.snake_body) > 1 else self.snake_pos
-    #     old_dist = abs(old_head[0] - self.food_pos[0]) + abs(old_head[1] - self.food_pos[1])
-        
-    #     # Progressive rewards and penalties
-    #     reward = 0
-    #     reward += 0.5 if new_dist < old_dist else -0.3
-    #     reward -= 0.05  # Time penalty per step
-    #     reward -= 0.1 * sum(self.get_state()[4:7])  # FIXME Danger penalty
-    #     return reward
 
     def check_game_over(self):
         # Return True if the game is over, else False
@@ -162,34 +117,22 @@ class SnakeGameEnv:
 
     def calculate_reward(self):
         # Your code here
-        """
-        Calculate reward based on game events and movement efficiency.
-        """
-        # Food-related rewards
-        if self.snake_pos[0] == self.food_pos[0] and self.snake_pos[1] == self.food_pos[1]:
-            return 10.0  # Major reward for eating food
-            
-        # Death penalty
+        if self.snake_pos == self.food_pos:
+            return 25.0  # Strong food incentive
         if self.check_game_over():
-            return -10.0  # High penalty for dying
+            return -25.0  # Balanced death penalty
         
-        # Movement rewards/penalties
-        head_x, head_y = self.snake_pos
-        food_x, food_y = self.food_pos
+        new_dist = math.hypot(self.snake_pos[0]-self.food_pos[0], 
+                            self.snake_pos[1]-self.food_pos[1])
         
-        # Calculate distances
-        new_dist = abs(head_x - food_x) + abs(head_y - food_y)
-        old_head = self.snake_body[1] if len(self.snake_body) > 1 else self.snake_pos
-        old_dist = abs(old_head[0] - food_x) + abs(old_head[1] - food_y)
+        reward = 0.5  # Survival bonus
+        reward += 2.0 / (new_dist + 1)  # Continuous distance reward
         
-        # Reward moving toward food, penalize moving away
-        if new_dist < old_dist:
-            return 0.1  # Small reward for getting closer to food
-        elif new_dist > old_dist:
-            return -0.1  # Small penalty for moving away from food
+        # Progressive danger penalty
+        danger_score = sum(self.get_state()[4:7])  # sum of danger flags
+        reward -= danger_score * 0.5  # penalize dangerous situations
         
-        # Small penalty for each step to discourage loops/waiting
-        return -0.01
+        return np.clip(reward, -5, 25)  # Keep within reasonable bounds
 
     def update_snake_position(self, action):
         # Updates the snake's position based on the action
@@ -242,3 +185,4 @@ class SnakeGameEnv:
         if not self.food_spawn:
             self.food_pos = [random.randrange(1, (self.frame_size_x//10)) * 10, random.randrange(1, (self.frame_size_x//10)) * 10]
         self.food_spawn = True
+
