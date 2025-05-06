@@ -42,56 +42,76 @@ class SnakeGameEnv:
         return state, reward, self.game_over
 
     def get_state(self):
-        state = np.zeros(10)  # Expanded to 10 features
+        # Your code here: return the state of the environment
+        # now returns 15 features: 
+        # 0–9: as before, 10 new: wall distances (4) + nearest body distance (1)
+        state = np.zeros(15)
         
         head_x = self.snake_pos[0]
         head_y = self.snake_pos[1]
-        dx = self.food_pos[0] - head_x  # Food X relative to head
-        dy = self.food_pos[1] - head_y  # Food Y relative to head
+        dx = self.food_pos[0] - head_x
+        dy = self.food_pos[1] - head_y
         
         # Danger detection (straight, right, left)
         danger_straight, danger_right, danger_left = False, False, False
-        
         if self.direction == 'UP':
             danger_straight = (head_y - 10 < 0) or ([head_x, head_y - 10] in self.snake_body[1:])
-            danger_right = (head_x + 10 >= self.frame_size_x) or ([head_x + 10, head_y] in self.snake_body[1:])
-            danger_left = (head_x - 10 < 0) or ([head_x - 10, head_y] in self.snake_body[1:])
-            food_forward = dy < 0
-            food_right = dx > 0
-            
+            danger_right    = (head_x + 10 >= self.frame_size_x) or ([head_x + 10, head_y] in self.snake_body[1:])
+            danger_left     = (head_x - 10 < 0) or ([head_x - 10, head_y] in self.snake_body[1:])
+            food_forward    = dy < 0
+            food_right      = dx > 0
         elif self.direction == 'DOWN':
             danger_straight = (head_y + 10 >= self.frame_size_y) or ([head_x, head_y + 10] in self.snake_body[1:])
-            danger_right = (head_x - 10 < 0) or ([head_x - 10, head_y] in self.snake_body[1:])
-            danger_left = (head_x + 10 >= self.frame_size_x) or ([head_x + 10, head_y] in self.snake_body[1:])
-            food_forward = dy > 0
-            food_right = dx < 0
-            
+            danger_right    = (head_x - 10 < 0) or ([head_x - 10, head_y] in self.snake_body[1:])
+            danger_left     = (head_x + 10 >= self.frame_size_x) or ([head_x + 10, head_y] in self.snake_body[1:])
+            food_forward    = dy > 0
+            food_right      = dx < 0
         elif self.direction == 'LEFT':
             danger_straight = (head_x - 10 < 0) or ([head_x - 10, head_y] in self.snake_body[1:])
-            danger_right = (head_y + 10 >= self.frame_size_y) or ([head_x, head_y + 10] in self.snake_body[1:])
-            danger_left = (head_y - 10 < 0) or ([head_x, head_y - 10] in self.snake_body[1:])
-            food_forward = dx < 0
-            food_right = dy < 0
-            
+            danger_right    = (head_y + 10 >= self.frame_size_y) or ([head_x, head_y + 10] in self.snake_body[1:])
+            danger_left     = (head_y - 10 < 0) or ([head_x, head_y - 10] in self.snake_body[1:])
+            food_forward    = dx < 0
+            food_right      = dy < 0
         else:  # RIGHT
             danger_straight = (head_x + 10 >= self.frame_size_x) or ([head_x + 10, head_y] in self.snake_body[1:])
-            danger_right = (head_y - 10 < 0) or ([head_x, head_y - 10] in self.snake_body[1:])
-            danger_left = (head_y + 10 >= self.frame_size_y) or ([head_x, head_y + 10] in self.snake_body[1:])
-            food_forward = dx > 0
-            food_right = dy > 0
-
-        # State features
-        state[0] = head_x / self.frame_size_x  # Normalized X position
-        state[1] = head_y / self.frame_size_y  # Normalized Y position
-        state[2] = dx / self.frame_size_x      # Normalized X distance to food
-        state[3] = dy / self.frame_size_y      # Normalized Y distance to food
+            danger_right    = (head_y - 10 < 0) or ([head_x, head_y - 10] in self.snake_body[1:])
+            danger_left     = (head_y + 10 >= self.frame_size_y) or ([head_x, head_y + 10] in self.snake_body[1:])
+            food_forward    = dx > 0
+            food_right      = dy > 0
+        
+        # original 10 features
+        state[0] = head_x / self.frame_size_x
+        state[1] = head_y / self.frame_size_y
+        state[2] = dx / self.frame_size_x
+        state[3] = dy / self.frame_size_y
         state[4] = int(danger_straight)
         state[5] = int(danger_right)
         state[6] = int(danger_left)
-        state[7] = int(food_forward)  # Is food in front relative to current direction
-        state[8] = int(food_right)    # Is food to the right relative to current direction
-        state[9] = len(self.snake_body) / 20  # Normalized body length (cap at 20)
-
+        state[7] = int(food_forward)
+        state[8] = int(food_right)
+        state[9] = len(self.snake_body) / 20
+        
+        max_steps_x = self.frame_size_x // 10
+        max_steps_y = self.frame_size_y // 10
+        
+        dist_up    = head_y // 10
+        dist_down  = (self.frame_size_y - head_y - 10) // 10
+        dist_left  = head_x // 10
+        dist_right = (self.frame_size_x - head_x - 10) // 10
+        
+        state[10] = dist_up    / max_steps_y
+        state[11] = dist_down  / max_steps_y
+        state[12] = dist_left  / max_steps_x
+        state[13] = dist_right / max_steps_x
+        
+        if len(self.snake_body) > 1:
+            dists = [math.hypot(seg[0]-head_x, seg[1]-head_y) for seg in self.snake_body[1:]]
+            min_body = min(dists)
+        else:
+            min_body = math.hypot(self.frame_size_x, self.frame_size_y)
+        # normalize by board diagonal
+        state[14] = min_body / math.hypot(self.frame_size_x, self.frame_size_y)
+        
         return state
 
     def get_body(self):
@@ -116,23 +136,36 @@ class SnakeGameEnv:
         return False
 
     def calculate_reward(self):
-        # Your code here
-        if self.snake_pos == self.food_pos:
-            return 25.0  # Strong food incentive
+        """
+        Simplified reward function with better incentives for survival and food-seeking
+        """
+        # base case - small positive reward for survival
+        reward = 0.1
+        
+        # terminal case - game over
         if self.check_game_over():
-            return -25.0  # Balanced death penalty
+            return -10.0  # significant but not extreme penalty
         
-        new_dist = math.hypot(self.snake_pos[0]-self.food_pos[0], 
-                            self.snake_pos[1]-self.food_pos[1])
+        # food reward
+        if self.snake_pos[0] == self.food_pos[0] and self.snake_pos[1] == self.food_pos[1]:
+            print("Snake ate food")
+            return 12.0  # good but not overwhelming reward
         
-        reward = 0.5  # Survival bonus
-        reward += 2.0 / (new_dist + 1)  # Continuous distance reward
+        # distance-based reward shaping - use manhattan distance for simplicity
+        curr_dist = abs(self.snake_pos[0] - self.food_pos[0]) + abs(self.snake_pos[1] - self.food_pos[1])
+        prev_head = self.snake_body[1] if len(self.snake_body) > 1 else self.snake_pos
+        prev_dist = abs(prev_head[0] - self.food_pos[0]) + abs(prev_head[1] - self.food_pos[1])
         
-        # Progressive danger penalty
-        danger_score = sum(self.get_state()[4:7])  # sum of danger flags
-        reward -= danger_score * 0.5  # penalize dangerous situations
+        # reward for getting closer to food (normalized by board size)
+        max_dist = self.frame_size_x + self.frame_size_y
+        delta = (prev_dist - curr_dist) / max_dist
+        reward += delta * 5.0  # scale the distance reward
         
-        return np.clip(reward, -5, 25)  # Keep within reasonable bounds
+        # add slight penalty for very long games to encourage food-seeking
+        reward -= 0.001 * (len(self.snake_body) - 3)  # small penalty based on steps taken
+        
+        return reward
+
 
     def update_snake_position(self, action):
         # Updates the snake's position based on the action
@@ -185,4 +218,3 @@ class SnakeGameEnv:
         if not self.food_spawn:
             self.food_pos = [random.randrange(1, (self.frame_size_x//10)) * 10, random.randrange(1, (self.frame_size_x//10)) * 10]
         self.food_spawn = True
-
