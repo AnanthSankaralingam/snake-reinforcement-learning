@@ -47,9 +47,10 @@ class QLearning:
             self.q_table[state][action] = (1 - self.alpha) * self.q_table[state][action] + self.alpha * reward
         else:
             # Non-terminal: Include discounted max Q(nextState)
-            max_next_q = max(self.q_table[next_state][action]) #FIXME action
+            max_next_q = max(self.q_table[next_state][action]) 
             self.q_table[state][action] = (1 - self.alpha) * self.q_table[state][action] + self.alpha * (reward + self.discount * max_next_q)
         """
+        # Your code here
         reward = np.clip(reward, -10, 20)  # Prevent extreme rewards
         
         current_q = self.q_table[state, action]
