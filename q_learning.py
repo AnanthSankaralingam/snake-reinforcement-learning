@@ -51,7 +51,7 @@ class QLearning:
             self.q_table[state][action] = (1 - self.alpha) * self.q_table[state][action] + self.alpha * (reward + self.discount * max_next_q)
         """
         # Your code here
-        reward = np.clip(reward, -10, 20)  # Prevent extreme rewards
+        reward = np.clip(reward, -10, 20)  
         
         current_q = self.q_table[state, action]
 
@@ -61,13 +61,11 @@ class QLearning:
             new_q = (1 - self.alpha) * current_q + self.alpha * (reward + 0) 
             #current_q + self.alpha * (reward - current_q)
         else:
-            # Normal Bellman equation update
             max_next_q = np.max(self.q_table[next_state])
             new_q = (1 - self.alpha) * current_q + self.alpha * (reward + self.gamma * max_next_q)
 
         self.q_table[state, action] = new_q
 
-        # Decay alpha
         self.alpha = max(self.alpha_min, self.alpha * self.alpha_decay)
         
     def save_q_table(self, filename="q_table.txt"):
