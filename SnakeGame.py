@@ -13,9 +13,10 @@ import sys
 import math
 
 def get_state_index(state, env):
-    """Convert continuous state to discrete index using new state features"""
-    # Extract normalized values from state
-    head_x_norm, head_y_norm, dx_norm, dy_norm, danger_straight, danger_right, danger_left, food_forward, food_right, body_length = state
+    """Convert continuous state to discrete index using enhanced state features"""
+    # Your code here
+    # Extract normalized values from state (now 15 features)
+    head_x_norm, head_y_norm, dx_norm, dy_norm, danger_straight, danger_right, danger_left, food_forward, food_right, body_length, wall_up, wall_down, wall_left, wall_right, body_dist = state
     
     # Convert normalized distances back to pixels for binning
     dx = dx_norm * env.frame_size_x
@@ -37,58 +38,151 @@ def get_state_index(state, env):
     # Danger level (3 possibilities: 0, 1, or 2+ dangers)
     danger_level = min(2, danger_straight + danger_right + danger_left)
     
+    # Wall proximity (2 possibilities: close to wall or not)
+    wall_proximity = 0
+    if min(wall_up, wall_down, wall_left, wall_right) < 0.2:  # Close to at least one wall
+        wall_proximity = 1
+    
+    # Body proximity (2 possibilities: close to body or not)
+    body_proximity = 0
+    if body_dist < 0.2 and body_length > 0.2:  # Close to body and has some length
+        body_proximity = 1
+    
     # Body length bins (3 possibilities)
     length_bin = min(2, int(body_length * 20 // 7))  # 3 bins
     
-    # Combined index (6 dir × 4 dist × 3 danger × 3 length = 216 total)
-    return int((direction * 36) + (distance_bin * 9) + (danger_level * 3) + length_bin)
+    # Combined index (6 dir × 4 dist × 3 danger × 2 wall × 2 body × 3 length = 864 total)
+    # We'll use a subset of these combinations to keep the state space manageable
+    return int((direction * 48) + (distance_bin * 12) + (danger_level * 4) + (wall_proximity * 2) + body_proximity)
 
 def get_safe_actions(env, lookahead_steps=2):
-    """Updated to use normalized positions and new danger detection"""
+    """Returns actions that won't lead to collisions, with special handling for edge food"""
     safe_actions = []
+    food_actions = []  # track actions that lead directly to food
     current_head = env.snake_pos.copy()
     current_body = env.snake_body.copy()
-    state = env.get_state()  # Use new state representation
+    current_direction = env.direction
+    food_pos = env.food_pos
     
+    # Map directions to actions and back
+    direction_to_action = {'UP': 0, 'DOWN': 1, 'LEFT': 2, 'RIGHT': 3}
+    action_to_direction = {0: 'UP', 1: 'DOWN', 2: 'LEFT', 3: 'RIGHT'}
+    incompatible = {'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT'}
+    
+    # Check if food is at the edge
+    food_at_edge = (food_pos[0] == 0 or food_pos[0] == env.frame_size_x - 10 or 
+                    food_pos[1] == 0 or food_pos[1] == env.frame_size_y - 10)
+    
+    # For each possible action
     for action in [0, 1, 2, 3]:
-        # Skip 180-degree reversals
-        if (env.direction == 'UP' and action == 1) or \
-           (env.direction == 'DOWN' and action == 0) or \
-           (env.direction == 'LEFT' and action == 3) or \
-           (env.direction == 'RIGHT' and action == 2):
-            continue
-            
-        # Check immediate danger using state flags
-        if action == 0:  # UP
-            if state[4]: continue  # danger_straight when facing up
-        elif action == 1:  # DOWN
-            if state[4] and env.direction == 'DOWN': continue
-        elif action == 2:  # LEFT
-            if state[6]: continue  # danger_left
-        elif action == 3:  # RIGHT
-            if state[5]: continue  # danger_right
-            
-        # Advanced collision prediction
-        virtual_head = current_head.copy()
-        if action == 0: virtual_head[1] -= 10
-        elif action == 1: virtual_head[1] += 10
-        elif action == 2: virtual_head[0] -= 10
-        elif action == 3: virtual_head[0] += 10
+        new_direction = action_to_direction[action]
         
-        # Normalized position check
-        if (virtual_head[0] < 0 or virtual_head[0] >= env.frame_size_x or 
-            virtual_head[1] < 0 or virtual_head[1] >= env.frame_size_y):
+        # Skip 180-degree reversals
+        if new_direction == incompatible.get(current_direction):
             continue
             
-        # Body collision check using new state info
-        if state[9] > 0.15:  # Only check if snake has some length
-            future_body = [virtual_head] + current_body[:-1]
-            if any(pos == virtual_head for pos in future_body[:int(state[9]*20)]):
+        # Calculate next position
+        next_head = current_head.copy()
+        if new_direction == 'UP':
+            next_head[1] -= 10
+        elif new_direction == 'DOWN':
+            next_head[1] += 10
+        elif new_direction == 'LEFT':
+            next_head[0] -= 10
+        elif new_direction == 'RIGHT':
+            next_head[0] += 10
+        
+        # Check if this action leads to food
+        leads_to_food = (next_head[0] == food_pos[0] and next_head[1] == food_pos[1])
+        if leads_to_food:
+            food_actions.append(action)
+            
+        # Simulate the move for safety
+        is_safe = True
+        virtual_head = current_head.copy()
+        virtual_body = current_body.copy()
+        virtual_direction = current_direction
+        
+        # Perform lookahead
+        for step in range(lookahead_steps):
+            # Update direction based on action (only for first step)
+            if step == 0:
+                virtual_direction = new_direction
+            
+            # Move virtual head according to direction
+            if virtual_direction == 'UP':
+                virtual_head[1] -= 10
+            elif virtual_direction == 'DOWN':
+                virtual_head[1] += 10
+            elif virtual_direction == 'LEFT':
+                virtual_head[0] -= 10
+            elif virtual_direction == 'RIGHT':
+                virtual_head[0] += 10
+            
+            # Check wall collision
+            if (virtual_head[0] < 0 or virtual_head[0] >= env.frame_size_x or 
+                virtual_head[1] < 0 or virtual_head[1] >= env.frame_size_y):
+                is_safe = False
+                break
+                
+            # For food at edge, relax safety constraints when action leads directly to food
+            if step > 0 or not (leads_to_food and food_at_edge):
+                # Check body collision (excluding the tail piece that will move)
+                check_body = virtual_body[:-1] if step == 0 else virtual_body
+                if any(virtual_head[0] == segment[0] and virtual_head[1] == segment[1] for segment in check_body):
+                    is_safe = False
+                    break
+            
+            # Update virtual body for next step simulation
+            virtual_body.insert(0, virtual_head.copy())
+            virtual_body.pop()
+        
+        if is_safe:
+            safe_actions.append(action)
+    
+    # If actions leading to food are available, prioritize them
+    if food_actions and food_at_edge:
+        # Find actions that both lead to food and are considered safe
+        safe_food_actions = [a for a in food_actions if a in safe_actions]
+        if safe_food_actions:
+            print("Edge food actions:", safe_food_actions)
+            return safe_food_actions
+        # If no safe action leads to food but food is at edge, take the risk
+        elif len(env.snake_body) > 5:  # Only take risks when snake has some length
+            print("Taking risk for edge food:", food_actions)
+            return food_actions
+            
+    print("Safe actions:", safe_actions)
+    
+    # If no safe actions, return actions that avoid immediate wall collisions
+    if not safe_actions:
+        immediate_safe = []
+        for action in [0, 1, 2, 3]:
+            new_direction = action_to_direction[action]
+            
+            # Skip 180-degree reversals
+            if new_direction == incompatible.get(current_direction):
                 continue
                 
-        safe_actions.append(action)
+            # Check only immediate wall collision
+            test_head = current_head.copy()
+            if new_direction == 'UP':
+                test_head[1] -= 10
+            elif new_direction == 'DOWN':
+                test_head[1] += 10
+            elif new_direction == 'LEFT':
+                test_head[0] -= 10
+            elif new_direction == 'RIGHT':
+                test_head[0] += 10
+                
+            if (test_head[0] >= 0 and test_head[0] < env.frame_size_x and 
+                test_head[1] >= 0 and test_head[1] < env.frame_size_y):
+                immediate_safe.append(action)
+        
+        print("No safe actions. Using wall-avoiding actions:", immediate_safe)
+        return immediate_safe if immediate_safe else [0, 1, 2, 3]
     
-    return safe_actions if safe_actions else [0, 1, 2, 3]
+    return safe_actions
 
 def main():
     # Window size
@@ -102,7 +196,7 @@ def main():
     GREEN = pygame.Color(0, 255, 0)
     BLUE = pygame.Color(0, 0, 255)
     
-    difficulty = 20  # Adjust as needed
+    difficulty = 25  # Adjust as needed
     render_game = True # Show the game or not
     growing_body = True # Makes the body of the snake grow
     training = True # Defines if it should train or not
@@ -118,14 +212,14 @@ def main():
     ql = QLearning(
         n_states=number_states, 
         n_actions=4,
-        alpha=0.1,       # Higher learning rate
-        gamma=0.98,      # Slightly more future-focused
-        epsilon=1.0,
-        epsilon_min=0.1,  # Maintain some exploration
-        epsilon_decay=0.995  # Slower decay
+        alpha=0.2,       # higher learning rate to learn faster
+        gamma=0.95,      # balance between immediate and future rewards
+        epsilon=1.0,     # start fully exploratory
+        epsilon_min=0.1,  # maintain some exploration
+        epsilon_decay=0.999  # slower decay for more exploration
     )
 
-    num_episodes = 1000 # the number of episodes you want for training.
+    num_episodes = 5000  # the number of episodes you want for training.
         
     
     if render_game:
@@ -218,6 +312,8 @@ def main():
     
 if __name__ == "__main__":
     main()
+
+
 
 
 
